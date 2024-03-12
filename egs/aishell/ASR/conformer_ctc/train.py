@@ -493,13 +493,11 @@ def train_one_epoch(
             graph_compiler=graph_compiler,
             is_training=True,
         )
-
         # summary stats
         tot_loss = (tot_loss * (1 - 1 / params.reset_interval)) + loss_info
 
         # NOTE: We use reduction==sum and loss is computed over utterances
         # in the batch and there is no normalization to it so far.
-
         optimizer.zero_grad()
         loss.backward()
         clip_grad_norm_(model.parameters(), 5.0, 2.0)
@@ -570,7 +568,6 @@ def run(rank, world_size, args):
         tb_writer = SummaryWriter(log_dir=f"{params.exp_dir}/tensorboard")
     else:
         tb_writer = None
-
     lexicon = Lexicon(params.lang_dir)
     max_token_id = max(lexicon.tokens)
     num_classes = max_token_id + 1  # +1 for the blank

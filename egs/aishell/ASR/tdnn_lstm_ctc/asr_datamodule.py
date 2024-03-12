@@ -78,7 +78,7 @@ class AishellAsrDataModule:
         group.add_argument(
             "--max-duration",
             type=int,
-            default=200.0,
+            default=500.0,
             help="Maximum pooled recordings duration (seconds) in a "
             "single batch. You can reduce it if it causes CUDA OOM.",
         )
@@ -166,7 +166,7 @@ class AishellAsrDataModule:
         group.add_argument(
             "--spec-aug-time-warp-factor",
             type=int,
-            default=80,
+            default=20,
             help="Used only when --enable-spec-aug is True. "
             "It specifies the factor for time warping in SpecAugment. "
             "Larger values mean more warping. "
@@ -176,7 +176,7 @@ class AishellAsrDataModule:
         group.add_argument(
             "--enable-musan",
             type=str2bool,
-            default=True,
+            default=False,
             help="When enabled, select noise from MUSAN and mix it"
             "with training dataset. ",
         )
@@ -369,9 +369,9 @@ class AishellAsrDataModule:
     @lru_cache()
     def valid_cuts(self) -> CutSet:
         logging.info("About to get dev cuts")
-        return load_manifest_lazy(self.args.manifest_dir / "aishell_cuts_dev.jsonl.gz")
+        return load_manifest_lazy(self.args.manifest_dir / "latic_cuts_test.jsonl.gz")
 
     @lru_cache()
     def test_cuts(self) -> List[CutSet]:
         logging.info("About to get test cuts")
-        return load_manifest_lazy(self.args.manifest_dir / "aishell_cuts_test.jsonl.gz")
+        return load_manifest_lazy(self.args.manifest_dir / "latic_cuts_test.jsonl.gz")

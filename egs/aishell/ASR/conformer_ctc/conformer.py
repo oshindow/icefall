@@ -22,8 +22,8 @@ from typing import Optional, Tuple
 
 import torch
 from torch import Tensor, nn
-from transformer import Supervisions, Transformer, encoder_padding_mask
-
+from conformer_ctc.transformer import Supervisions, Transformer, encoder_padding_mask
+from finetune_hubert_transducer.encoder_interface import EncoderInterface
 
 class Conformer(Transformer):
     """
@@ -45,6 +45,7 @@ class Conformer(Transformer):
 
     def __init__(
         self,
+        # encoder: EncoderInterface,
         num_features: int,
         num_classes: int,
         subsampling_factor: int = 4,
@@ -60,6 +61,7 @@ class Conformer(Transformer):
         use_feat_batchnorm: bool = False,
     ) -> None:
         super(Conformer, self).__init__(
+            # encoder=encoder,
             num_features=num_features,
             num_classes=num_classes,
             subsampling_factor=subsampling_factor,
@@ -85,6 +87,7 @@ class Conformer(Transformer):
             normalize_before,
         )
         self.encoder = ConformerEncoder(encoder_layer, num_encoder_layers)
+        # self.encoder = encoder
         self.normalize_before = normalize_before
         if self.normalize_before:
             self.after_norm = nn.LayerNorm(d_model)
@@ -119,8 +122,9 @@ class Conformer(Transformer):
         mask = encoder_padding_mask(x.size(0), supervisions)
         if mask is not None:
             mask = mask.to(x.device)
+        print(mask.shape)
         x = self.encoder(x, pos_emb, src_key_padding_mask=mask)  # (T, B, F)
-
+        # x, encoder_out_lens = self.encoder(x, x_lens, is_training=is_training)
         if self.normalize_before:
             x = self.after_norm(x)
 

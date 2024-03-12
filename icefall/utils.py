@@ -197,12 +197,16 @@ def encode_supervisions(
         (
             supervisions["sequence_idx"],
             torch.div(
-                supervisions["start_frame"],
+                # position 1
+                # supervisions["start_frame"],
+                supervisions["start_sample"],
                 subsampling_factor,
                 rounding_mode="floor",
             ),
             torch.div(
-                supervisions["num_frames"],
+                # position 2
+                # supervisions["num_frames"],
+                supervisions["num_samples"],
                 subsampling_factor,
                 rounding_mode="floor",
             ),

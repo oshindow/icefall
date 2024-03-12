@@ -241,6 +241,7 @@ class UniqLexicon(Lexicon):
 
         word_ids_list = []
         for text in texts:
+            print(text)
             word_ids = []
             for word in text.split():
                 if word in self.word_table:
@@ -252,7 +253,39 @@ class UniqLexicon(Lexicon):
         ans = self.ragged_lexicon.index(ragged_indexes)
         ans = ans.remove_axis(ans.num_axes - 2)
         return ans
+    
+    def text_to_token_ids(
+        self, text: str, oov: str = "<UNK>"
+    ) -> k2.RaggedTensor:
+        """
+        Args:
+          texts:
+            A list of transcripts. Each transcript contains space(s)
+            separated words. An example texts is::
 
+                ['HELLO k2', 'HELLO icefall']
+          oov:
+            The OOV word. If a word in `texts` is not in the lexicon, it is
+            replaced with `oov`.
+        Returns:
+          Return a ragged int tensor with 2 axes [utterance][token_id]
+        """
+        oov_id = self.word_table[oov]
+
+        word_ids_list = []
+        # for text in texts:
+            # print(text)
+        word_ids = []
+        if text in self.word_table:
+            word_ids.append(self.word_table[text])
+        else:
+            word_ids.append(oov_id)
+        word_ids_list.append(word_ids)
+        ragged_indexes = k2.RaggedTensor(word_ids_list, dtype=torch.int32)
+        ans = self.ragged_lexicon.index(ragged_indexes)
+        ans = ans.remove_axis(ans.num_axes - 2)
+        return ans
+    
     def words_to_token_ids(self, words: List[str]) -> k2.RaggedTensor:
         """Convert a list of words to a ragged tensor containing token IDs.
 

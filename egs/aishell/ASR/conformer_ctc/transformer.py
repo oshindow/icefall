@@ -20,9 +20,10 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-from label_smoothing import LabelSmoothingLoss
-from subsampling import Conv2dSubsampling, VggSubsampling
+from conformer_ctc.label_smoothing import LabelSmoothingLoss
+from conformer_ctc.subsampling import Conv2dSubsampling, VggSubsampling
 from torch.nn.utils.rnn import pad_sequence
+from finetune_hubert_transducer.encoder_interface import EncoderInterface
 
 # Note: TorchScript requires Dict/List/etc. to be fully typed.
 Supervisions = Dict[str, torch.Tensor]
@@ -31,10 +32,11 @@ Supervisions = Dict[str, torch.Tensor]
 class Transformer(nn.Module):
     def __init__(
         self,
-        num_features: int,
-        num_classes: int,
-        subsampling_factor: int = 4,
-        d_model: int = 256,
+        # encoder: EncoderInterface,
+        num_features: int = 80,
+        num_classes: int = 215,
+        subsampling_factor: int = 1,
+        d_model: int = 1024,
         nhead: int = 4,
         dim_feedforward: int = 2048,
         num_encoder_layers: int = 12,
@@ -81,8 +83,8 @@ class Transformer(nn.Module):
         self.num_features = num_features
         self.num_classes = num_classes
         self.subsampling_factor = subsampling_factor
-        if subsampling_factor != 4:
-            raise NotImplementedError("Support only 'subsampling_factor=4'.")
+        # if subsampling_factor != 4:
+        #     raise NotImplementedError("Support only 'subsampling_factor=4'.")
 
         # self.encoder_embed converts the input of shape (N, T, num_classes)
         # to the shape (N, T//subsampling_factor, d_model).
@@ -281,8 +283,11 @@ class Transformer(nn.Module):
         tgt_key_padding_mask[:, 0] = False
 
         tgt = self.decoder_embed(ys_in_pad)  # (N, T) -> (N, T, C)
+        # print(tgt.shape)
         tgt = self.decoder_pos(tgt)
         tgt = tgt.permute(1, 0, 2)  # (N, T, C) -> (T, N, C)
+        # memory = memory.permute(1, 0, 2)
+        # print(tgt.shape, memory.shape)
         pred_pad = self.decoder(
             tgt=tgt,
             memory=memory,
@@ -589,6 +594,13 @@ class TransformerDecoderLayer(nn.Module):
         residual = tgt
         if self.normalize_before:
             tgt = self.norm2(tgt)
+        # print('self.src_attn', tgt.shape)
+        # print('self.src_attn', memory.shape)
+        # self.src_attn torch.Size([23, 114, 512]) T,N,C
+        # self.src_attn torch.Size([108, 114, 512])
+# k = k.contiguous().view(k.shape[0], bsz * num_heads, head_dim).transpose(0, 1)
+# RuntimeError: shape '[22, 88, 64]' is invalid for input of size 630784
+        # 88*4=364
         tgt2 = self.src_attn(
             tgt,
             memory,
