@@ -9,9 +9,9 @@ export CUDA_VISIBLE_DEVICES=1
 set -eou pipefail
 
 nj=15
-stage=30
-stop_stage=30
-perturb_speed=true
+stage=0
+stop_stage=5
+perturb_speed=false
 
 # We assume dl_dir (download dir) contains the following
 # directories and files. If not, they will be downloaded
@@ -61,84 +61,39 @@ log() {
 log "dl_dir: $dl_dir"
 
 if [ $stage -le 0 ] && [ $stop_stage -ge 0 ]; then
-  log "stage 0: Download data"
+  log "stage 0: writing /data2/xintong/LATIC/SCRIPT/
+      text_latic.txt, text_latic_train_id.txt, and latic_dict.txt"
 
-  # If you have pre-downloaded it to /path/to/aishell,
-  # you can create a symlink
-  #
-  #   ln -sfv /path/to/aishell $dl_dir/aishell
-  #
-  # The directory structure is
-  # aishell/
-  # |-- data_aishell
-  # |   |-- transcript
-  # |   `-- wav
-  # `-- resource_aishell
-  #     |-- lexicon.txt
-  #     `-- speaker.info
+  python3 latic_preprocess.py
 
-  if [ ! -d $dl_dir/aishell/data_aishell/wav/train ]; then
-    lhotse download aishell $dl_dir
-  fi
-
-  # If you have pre-downloaded it to /path/to/musan,
-  # you can create a symlink
-  #
-  #   ln -sfv /path/to/musan $dl_dir/musan
-  #
-  if [ ! -d $dl_dir/musan ]; then
-    lhotse download musan $dl_dir
-  fi
 fi
 
 if [ $stage -le 1 ] && [ $stop_stage -ge 1 ]; then
-  log "Stage 1: Prepare aishell manifest"
+  log "Stage 1: Prepare latic manifest data/manifests"
   # We assume that you have downloaded the aishell corpus
   # to $dl_dir/aishell
-  if [ ! -f data/manifests/.aishell_manifests.done ]; then
-    mkdir -p data/manifests
-    lhotse prepare aishell $dl_dir/aishell data/manifests
-    touch data/manifests/.aishell_manifests.done
-  fi
+  python3 dump_manifest_latic.py
+    
 fi
 
 if [ $stage -le 2 ] && [ $stop_stage -ge 2 ]; then
-  log "Stage 2: Prepare musan manifest"
-  # We assume that you have downloaded the musan corpus
-  # to data/musan
-  if [ ! -f data/manifests/.musan_manifests.done ]; then
-    log "It may take 6 minutes"
-    mkdir -p data/manifests
-    lhotse prepare musan $dl_dir/musan data/manifests
-    touch data/manifests/.musan_manifests.done
-  fi
-fi
-
-if [ $stage -le 3 ] && [ $stop_stage -ge 3 ]; then
-  log "Stage 3: Compute fbank for aishell"
-  if [ ! -f data/fbank/.aishell.done ]; then
-    mkdir -p data/fbank
-    python3 ./local/compute_fbank_aishell.py --perturb-speed ${perturb_speed}
-    touch data/fbank/.aishell.done
-  fi
+  log "Stage 2: Prepare latic manifest data/fbank"
+  python3 ./local/compute_fbank_latic.py
 fi
 
 if [ $stage -le 4 ] && [ $stop_stage -ge 4 ]; then
-  log "Stage 4: Compute fbank for musan"
-  if [ ! -f data/fbank/.msuan.done ]; then
-    mkdir -p data/fbank
-    ./local/compute_fbank_musan.py
-    touch data/fbank/.msuan.done
-  fi
+  log "Stage 4: add pitch to manifest"
+  python3 dump_manifest.py
 fi
 
-lang_phone_dir=data/lang_phone_merge
+lang_phone_dir=data/lang_phone_latic
+rm -r $lang_phone_dir
 if [ $stage -le 5 ] && [ $stop_stage -ge 5 ]; then
   log "Stage 5: Prepare phone based lang"
   mkdir -p $lang_phone_dir
 
   (echo '!SIL SIL'; echo '<SPOKEN_NOISE> SPN'; echo '<UNK> SPN'; ) |
-    cat - $dl_dir/aishell/resource_aishell/lexicon_merge.txt |
+    cat - /data2/xintong/LATIC/SCRIPT/latic_dict_2_merge.txt |
     sort | uniq > $lang_phone_dir/lexicon.txt
 
   ./local/generate_unique_lexicon.py --lang-dir $lang_phone_dir
@@ -151,9 +106,9 @@ if [ $stage -le 5 ] && [ $stop_stage -ge 5 ]; then
   # Train a bigram P for MMI training
   if [ ! -f $lang_phone_dir/transcript_words.txt ]; then
     log "Generate data to train phone based bigram P"
-    aishell_text=$dl_dir/aishell/data_aishell/transcript/aishell_transcript_v0.8.txt
-    aishell_train_uid=$dl_dir/aishell/data_aishell/transcript/aishell_train_uid
-    find $dl_dir/aishell/data_aishell/wav/train -name "*.wav" | sed 's/\.wav//g' | awk -F '/' '{print $NF}' > $aishell_train_uid
+    aishell_text=/data2/xintong/LATIC/SCRIPT/text_latic.txt
+    aishell_train_uid=/data2/xintong/LATIC/SCRIPT/text_latic_train_id.txt
+    # find $dl_dir/aishell/data_aishell/wav/train -name "*.wav" | sed 's/\.wav//g' | awk -F '/' '{print $NF}' > $aishell_train_uid
     awk 'NR==FNR{uid[$1]=$1} NR!=FNR{if($1 in uid) print $0}' $aishell_train_uid $aishell_text |
 	    cut -d " " -f 2- > $lang_phone_dir/transcript_words.txt
   fi
@@ -379,18 +334,4 @@ if [ $stage -le 12 ] && [ $stop_stage -ge 12 ]; then
     --lm-data-valid $out_dir/sorted_lm_data-valid.pt \
     --vocab-size 4336 \
     --master-port 12345
-fi
-
-# whisper large-v3 using 128 mel bins, others using 80 mel bins
-whisper_mel_bins=80
-output_dir=data/fbank_whisper
-if [ $stage -le 30 ] && [ $stop_stage -ge 30 ]; then
-  log "Stage 30: Compute ${whisper_mel_bins} dim fbank for whisper model fine-tuning"
-  # if [ ! -f $output_dir/.aishell.whisper.done ]; then
-    mkdir -p $output_dir
-    # ./local/compute_fbank_aishell.py --perturb-speed ${perturb_speed} --num-mel-bins ${whisper_mel_bins} --whisper-fbank true --output-dir $output_dir
-    ./local/compute_fbank_latic.py --num-mel-bins ${whisper_mel_bins} --whisper-fbank true --output-dir $output_dir
-    ./local/compute_fbank_musan.py --num-mel-bins ${whisper_mel_bins} --whisper-fbank true --output-dir $output_dir
-    # touch $output_dir/.aishell.whisper.done
-  # fi
 fi
